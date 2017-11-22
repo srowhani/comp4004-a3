@@ -1,0 +1,4 @@
+.idea/
+target/
+src/main/java/resources/client/dist
+src/main/java/resources/client/node_modules
