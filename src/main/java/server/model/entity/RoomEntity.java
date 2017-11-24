@@ -2,15 +2,17 @@ package server.model.entity;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class RoomEntity {
     private UserEntity host;
     private int capacity;
-    private List<UserEntity> users;
+
+    private List<PlayerEntity> players;
 
     public RoomEntity() {
         this.capacity = 0;
-        this.users = new ArrayList();
+        this.players = new ArrayList();
     }
 
     public UserEntity getHost() {
@@ -29,11 +31,23 @@ public class RoomEntity {
         return capacity;
     }
 
-    public List<UserEntity> getUsers() {
-        return users;
+    public List<PlayerEntity> getPlayers() {
+        return players;
     }
 
-    public void setUsers(List<UserEntity> users) {
-        this.users = users;
+
+    public boolean canHandleOneMore () {
+        return this.getPlayers().size() + 1 <= this.getCapacity();
+    }
+
+    public void addPlayer(PlayerEntity p) {
+        this.players.add(p);
+    }
+
+    public List<UserEntity> getUsers () {
+        return players.stream()
+            .filter(player -> player.getType().equals("user"))
+            .map(p -> (UserEntity) p)
+            .collect(Collectors.toList());
     }
 }

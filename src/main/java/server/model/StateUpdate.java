@@ -3,6 +3,12 @@ package server.model;
 import java.util.Map;
 
 public class StateUpdate {
+   public StateUpdate () {}
+
+   public StateUpdate(String type) {
+      this.type = type;
+   }
+
    private String type;
    private Map content;
 

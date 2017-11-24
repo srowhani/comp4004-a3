@@ -6,8 +6,14 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.eclipse.jetty.websocket.api.Session;
 import server.model.StateUpdate;
+import server.model.entity.BotEntity;
+import server.model.entity.PlayerEntity;
 import server.model.entity.RoomEntity;
 import server.model.entity.UserEntity;
+import server.model.entity.algo.Algorithm;
+import server.model.entity.algo.FlushAlgorithm;
+import server.model.entity.algo.HighCardAlgorithm;
+import server.model.entity.algo.StraightAlgorithm;
 
 import java.io.IOException;
 import java.util.*;
@@ -23,12 +29,18 @@ public class PokerGame {
     private Map<Session, String> sessions;
     private ObjectMapper objectMapper;
     private Map<String, RoomEntity> roomEntityMap;
-
+    private Map<String, Class> strats;
     private PokerGame() {
         objectMapper = new ObjectMapper();
         objectMapper.setVisibility(PropertyAccessor.FIELD, JsonAutoDetect.Visibility.ANY);
         sessions = new ConcurrentHashMap();
         roomEntityMap = new ConcurrentHashMap();
+
+        strats = new HashMap();
+        strats.put("type_high_card", HighCardAlgorithm.class);
+        strats.put("type_flush", FlushAlgorithm.class);
+        strats.put("type_straight", StraightAlgorithm.class);
+
     }
 
     public Map<Session, String> getSessions() {
@@ -45,25 +57,60 @@ public class PokerGame {
             hostGame(session, update);
         } else if (type.equals("attempt_join_room")) {
             attemptJoinRoom(session, update);
+        } else if (type.equals("room_add_ai")) {
+            roomAddAi(session, update);
+        } else if (type.equals("start_game")) {
+            startGame(session, update);
         }
     }
 
-    private void attemptJoinRoom(Session session, StateUpdate update) throws IOException {
+    private void startGame(Session session, StateUpdate update) {
         Map<Object, Object> payload = update.getContent();
         String roomId = String.valueOf(payload.get("room_id"));
-        String username = String.valueOf(payload.get("username"));
+
+        RoomEntity room = roomEntityMap.get(roomId);
+        PlayerEntity p = room.getPlayers().get(0);
+        if (p.getType().equals("user")) {
+            UserEntity u = (UserEntity) p;
+            StateUpdate uTurn = new StateUpdate("turn_update");
+            Map<Object, Object> v = new HashMap();
+            v.put("user_id", u.get_username());
+            room.getUsers().forEach(user -> {
+                try {
+                    user.get_session().getRemote().sendString(objectMapper.writeValueAsString(uTurn))
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            });
+        } else {
+
+        }
+        // prompt turn
+
+    }
+
+    private void roomAddAi(Session session, StateUpdate update) throws IOException {
+        Map<Object, Object> payload = update.getContent();
+        String aiType = String.valueOf(payload.get("ai_type"));
+        String roomId = String.valueOf(payload.get("room_id"));
+
+        BotEntity bot = new BotEntity();
+        bot.setUsername(String.valueOf(payload.get("name")));
+        try {
+            bot.setAlgorithm((Algorithm) strats.get(aiType).newInstance());
+        } catch (Exception e) {
+            session.getRemote().sendString(objectMapper.writeValueAsString(new StateUpdate("bot_instance_failed")));
+        }
 
         RoomEntity roomEntity = roomEntityMap.get(roomId);
-        UserEntity userEntity = new UserEntity(session, username);
 
-        if (roomEntity.getUsers().size() < roomEntity.getCapacity()) {
-            roomEntityMap.get(roomId).getUsers().add(userEntity);
-
+        if (roomEntity.canHandleOneMore()) {
+            roomEntity.addPlayer(bot);
             Map<String, Object> v = new HashMap();
             v.put("available_rooms", roomEntityMap.keySet().stream().map(key -> {
                 Map<Object, Object> t = new HashMap();
                 t.put("capacity", roomEntityMap.get(key).getCapacity());
-                t.put("num_users", roomEntityMap.get(key).getUsers().size());
+                t.put("num_users", roomEntityMap.get(key).getPlayers().size());
                 t.put("room_id", key);
                 return t;
             }).collect(Collectors.toList()));
@@ -82,10 +129,81 @@ public class PokerGame {
             u.setType("join_room_success");
             Map<Object, Object> c = new HashMap();
             c.put("room_id", roomId);
-            c.put("users", roomEntity.getUsers().stream().map(z -> z.get_username()).collect(Collectors.toList()));
+            c.put("room_host", roomEntity.getHost().get_username());
+            c.put("joined_user", bot.get_username());
+            c.put("users", roomEntity.getPlayers().stream().map(z -> z.get_username()).collect(Collectors.toList()));
             u.setContent(c);
 
+            roomEntity.getUsers().forEach(user -> {
+                try {
+                    user.get_session().getRemote().sendString(objectMapper.writeValueAsString(u));
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            });
+        }
+        // Room ready, tell admin to start
+        if (roomEntity.getPlayers().size() == roomEntity.getCapacity()) {
+            System.out.println("room_ready");
+            StateUpdate roomReady = new StateUpdate("room_ready");
+            roomEntity.getHost().get_session().getRemote().sendString(objectMapper.writeValueAsString(roomReady));
+        }
+    }
 
+    private void attemptJoinRoom(Session session, StateUpdate update) throws IOException {
+        Map<Object, Object> payload = update.getContent();
+        String roomId = String.valueOf(payload.get("room_id"));
+        String username = String.valueOf(payload.get("username"));
+
+        RoomEntity roomEntity = roomEntityMap.get(roomId);
+        UserEntity userEntity = new UserEntity(session, username);
+
+        if (roomEntity.getUsers().size() == 0) {
+            roomEntity.setHost(userEntity);
+            System.out.println("room_host_update");
+
+            StateUpdate hostUpdate = new StateUpdate("room_host_update");
+
+            Map<Object, Object> v = new HashMap();
+
+            v.put("current_room_host", userEntity.get_username());
+            v.put("current_room_id", roomId);
+
+            hostUpdate.setContent(v);
+
+            userEntity.get_session().getRemote().sendString(objectMapper.writeValueAsString(hostUpdate));
+        }
+
+        if (roomEntity.getPlayers().size() < roomEntity.getCapacity()) {
+            roomEntityMap.get(roomId).addPlayer(userEntity);
+
+            Map<String, Object> v = new HashMap();
+            v.put("available_rooms", roomEntityMap.keySet().stream().map(key -> {
+                Map<Object, Object> t = new HashMap();
+                t.put("capacity", roomEntityMap.get(key).getCapacity());
+                t.put("num_users", roomEntityMap.get(key).getPlayers().size());
+                t.put("room_id", key);
+                return t;
+            }).collect(Collectors.toList()));
+
+            StateUpdate newRoomAvailable = new StateUpdate();
+            newRoomAvailable.setType("room_created");
+            newRoomAvailable.setContent(v);
+
+            System.out.println("Publishing room_created");
+
+            for (Session s : sessions.keySet()) {
+                s.getRemote().sendString(serialize(newRoomAvailable));
+            }
+
+            StateUpdate u = new StateUpdate();
+            u.setType("join_room_success");
+            Map<Object, Object> c = new HashMap();
+            c.put("room_id", roomId);
+            c.put("room_host", roomEntity.getHost().get_username());
+            c.put("joined_user", userEntity.get_username());
+            c.put("users", roomEntity.getUsers().stream().map(z -> z.get_username()).collect(Collectors.toList()));
+            u.setContent(c);
 
             roomEntity.getUsers().forEach(user -> {
                 try {
@@ -97,10 +215,11 @@ public class PokerGame {
         } else {
             session.getRemote().sendString("{type: 'fail_join_room_attempt'}");
         }
-
-        if (roomEntity.getUsers().size() == roomEntity.getCapacity()) {
-            // Notify host game is ready to go.
-//            roomEntity.getHost().get_session().getRemote().sendString();
+        // Room ready, tell admin to start
+        if (roomEntity.getPlayers().size() == roomEntity.getCapacity()) {
+            System.out.println("room_ready");
+            StateUpdate roomReady = new StateUpdate("room_ready");
+            roomEntity.getHost().get_session().getRemote().sendString(objectMapper.writeValueAsString(roomReady));
         }
     }
 
@@ -113,12 +232,12 @@ public class PokerGame {
         String roomId = UUID.randomUUID().toString();
         roomEntityMap.put(roomId, roomEntity);
 
-        roomEntity.getUsers().add(host);
+        roomEntity.getPlayers().add(host);
         Map<String, Object> v = new HashMap();
         v.put("available_rooms", roomEntityMap.keySet().stream().map(key -> {
             Map<Object, Object> t = new HashMap();
             t.put("capacity", roomEntityMap.get(key).getCapacity());
-            t.put("num_users", roomEntityMap.get(key).getUsers().size());
+            t.put("num_users", roomEntityMap.get(key).getPlayers().size());
             t.put("room_id", key);
             return t;
         }).collect(Collectors.toList()));
@@ -135,7 +254,9 @@ public class PokerGame {
         u.setType("join_room_success");
         Map<Object, Object> c = new HashMap();
         c.put("room_id", roomId);
-        c.put("users", roomEntity.getUsers().stream().map(z -> z.get_username()).collect(Collectors.toList()));
+        c.put("joined_user", host.get_username());
+        c.put("room_host", host.get_username());
+        c.put("users", roomEntity.getPlayers().stream().map(z -> z.get_username()).collect(Collectors.toList()));
         u.setContent(c);
 
         host.get_session().getRemote().sendString(objectMapper.writeValueAsString(u));
@@ -153,16 +274,32 @@ public class PokerGame {
                     .filter(user -> user.get_session().equals(session)).findFirst();
 
             if (userEntityOptional.isPresent()) {
-                roomEntityMap.get(key).getUsers().remove(userEntityOptional.get());
+                roomEntityMap.get(key).getPlayers().remove(userEntityOptional.get());
                 if (!roomEntityMap.get(key).getUsers().isEmpty()) {
                     if (roomEntityMap.get(key).getHost().get_session().equals(session)) {
-                        roomEntityMap.get(key).setHost(roomEntityMap.get(key).getUsers().get(0));
+                        UserEntity newHost = roomEntityMap.get(key).getUsers().get(0);
+                        roomEntityMap.get(key).setHost(newHost);
+                        System.out.println("room_host_update");
+                        StateUpdate hostUpdate = new StateUpdate("room_host_update");
+
+                        Map<Object, Object> v = new HashMap();
+
+                        v.put("current_room_host", newHost.get_username());
+
+                        hostUpdate.setContent(v);
+                        roomEntityMap.get(key).getUsers().forEach(user -> {
+                            try {
+                                user.get_session().getRemote().sendString(objectMapper.writeValueAsString(hostUpdate));
+                            } catch (IOException e) {
+                                e.printStackTrace();
+                            }
+                        });
                     }
                 }
 
                 StateUpdate updateUserList = new StateUpdate();
                 Map<Object, Object> v = new HashMap();
-                v.put("users", roomEntityMap.get(key).getUsers().stream().map(user -> user.get_username()).collect(Collectors.toList()));
+                v.put("users", roomEntityMap.get(key).getPlayers().stream().map(user -> user.get_username()).collect(Collectors.toList()));
                 updateUserList.setType("update_user_list");
                 updateUserList.setContent(v);
                 roomEntityMap.get(key).getUsers().forEach(user -> {
@@ -225,6 +362,7 @@ public class PokerGame {
     }
 
     public void addSession(Session session) {
+        System.out.println("adding session" + session);
         sessions.put(session, "");
     }
 }
