@@ -1,42 +1,23 @@
 package server;
 
-import jdk.nashorn.internal.parser.JSONParser;
-import org.eclipse.jetty.websocket.api.annotations.OnWebSocketClose;
-import org.eclipse.jetty.websocket.api.annotations.OnWebSocketConnect;
-import org.eclipse.jetty.websocket.api.annotations.OnWebSocketMessage;
-import org.eclipse.jetty.websocket.api.annotations.WebSocket;
-import server.model.StateUpdate;
-import server.model.parser.Json;
-import spark.Session;
+import server.handler.StateUpdateSocketHandler;
+import server.instance.PokerGame;
+import spark.Request;
+import spark.Response;
+import spark.Route;
 
-import static spark.Spark.init;
-import static spark.Spark.staticFileLocation;
-import static spark.Spark.webSocket;
-
+import static spark.Spark.*;
 public class BootApplicationServer {
-    static PokerGame gameInstance;
-
-    @WebSocket
-    class StateUpdateSocketHandler {
-        @OnWebSocketConnect
-        public void onConnect (Session session) {
-        }
-        @OnWebSocketClose
-        public void onClose (Session session, int statusCode, String reason) {
-
-        }
-
-        @OnWebSocketMessage
-        public void onMessage (Session session, String msg) {
-            StateUpdate update = Json.parse(msg, StateUpdate.class);
-
-        }
-    }
-
     public static void main(String[] args) {
-        gameInstance = new PokerGame();
-        staticFileLocation("/client/dist");
+
+
+        staticFiles.location("/dist");
+        staticFiles.expireTime(600);
+
+        port(8081);
+
         webSocket("/game", StateUpdateSocketHandler.class);
+        System.out.println("Serving on port 8081");
         init();
     }
 
