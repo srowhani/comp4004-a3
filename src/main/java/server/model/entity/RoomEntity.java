@@ -5,12 +5,19 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 public class RoomEntity {
+    private String state;
+    private String[] actionQueue = {"action_flop", "action_turn", "action_river"};
+    private int queueIndex = 0;
+
     private UserEntity host;
+    private DealerEntity _dealer;
     private int capacity;
 
     private List<PlayerEntity> players;
 
     public RoomEntity() {
+        this.state = "not_started";
+        this._dealer = new DealerEntity();
         this.capacity = 0;
         this.players = new ArrayList();
     }
@@ -49,5 +56,21 @@ public class RoomEntity {
             .filter(player -> player.getType().equals("user"))
             .map(p -> (UserEntity) p)
             .collect(Collectors.toList());
+    }
+
+    public DealerEntity getDealer() {
+        return _dealer;
+    }
+
+    public String getAction () {
+        return this.actionQueue[(queueIndex++ % this.actionQueue.length)];
+    }
+
+    public String getState() {
+        return state;
+    }
+
+    public void setState(String state) {
+        this.state = state;
     }
 }

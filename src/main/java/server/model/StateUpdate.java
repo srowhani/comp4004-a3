@@ -1,17 +1,25 @@
 package server.model;
 
+import java.util.HashMap;
 import java.util.Map;
 
 public class StateUpdate {
-   public StateUpdate () {}
+
+   public StateUpdate () {
+      content = new HashMap();
+   }
 
    public StateUpdate(String type) {
+      this();
       this.type = type;
    }
 
    private String type;
-   private Map content;
+   private Map<Object, Object> content;
 
+   public void put (String key, Object value) {
+      content.put(key, value);
+   }
    public Map<Object, Object> getContent() {
       return content;
    }

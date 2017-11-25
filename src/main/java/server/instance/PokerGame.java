@@ -64,20 +64,36 @@ public class PokerGame {
         }
     }
 
-    private void startGame(Session session, StateUpdate update) {
-        Map<Object, Object> payload = update.getContent();
-        String roomId = String.valueOf(payload.get("room_id"));
-
+    private void playRound(String roomId) {
         RoomEntity room = roomEntityMap.get(roomId);
-        PlayerEntity p = room.getPlayers().get(0);
+
+        room.getDealer().get_deck()._init();
+
+        // Deal cards
+        room.getPlayers().forEach(player -> room.getDealer().deal(player.getHand()));
+
+        room.getUsers().forEach(user -> {
+            StateUpdate cardUpdate = new StateUpdate("got_cards");
+            List<String> cards = user.getHand().stream()
+                .map(card -> card.toString()).collect(Collectors.toList());
+            cardUpdate.put("player_cards", cards);
+            try {
+                user.get_session().getRemote().sendString(objectMapper.writeValueAsString(cardUpdate));
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        });
+
+        PlayerEntity p = room.getHost();
         if (p.getType().equals("user")) {
             UserEntity u = (UserEntity) p;
             StateUpdate uTurn = new StateUpdate("turn_update");
             Map<Object, Object> v = new HashMap();
             v.put("user_id", u.get_username());
-            room.getUsers().forEach(user -> {
+            uTurn.setContent(v);
+            room.getUsers().stream().forEach(user -> {
                 try {
-                    user.get_session().getRemote().sendString(objectMapper.writeValueAsString(uTurn))
+                    user.get_session().getRemote().sendString(objectMapper.writeValueAsString(uTurn));
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
@@ -85,8 +101,15 @@ public class PokerGame {
         } else {
 
         }
-        // prompt turn
+    }
 
+    private void startGame(Session session, StateUpdate update) throws IOException {
+        Map<Object, Object> payload = update.getContent();
+        String roomId = String.valueOf(payload.get("room_id"));
+        this.roomEntityMap.get(roomId).setState("game_started");
+        playRound(roomId);
+        StateUpdate gameStarted = new StateUpdate("game_started");
+        session.getRemote().sendString(objectMapper.writeValueAsString(gameStarted));
     }
 
     private void roomAddAi(Session session, StateUpdate update) throws IOException {
@@ -158,6 +181,10 @@ public class PokerGame {
         RoomEntity roomEntity = roomEntityMap.get(roomId);
         UserEntity userEntity = new UserEntity(session, username);
 
+        if (roomEntity.getState() == "game_started") {
+            return;
+        }
+
         if (roomEntity.getUsers().size() == 0) {
             roomEntity.setHost(userEntity);
             System.out.println("room_host_update");
@@ -202,7 +229,7 @@ public class PokerGame {
             c.put("room_id", roomId);
             c.put("room_host", roomEntity.getHost().get_username());
             c.put("joined_user", userEntity.get_username());
-            c.put("users", roomEntity.getUsers().stream().map(z -> z.get_username()).collect(Collectors.toList()));
+            c.put("users", roomEntity.getPlayers().stream().map(z -> z.get_username()).collect(Collectors.toList()));
             u.setContent(c);
 
             roomEntity.getUsers().forEach(user -> {
@@ -353,7 +380,7 @@ public class PokerGame {
         content.put("available_rooms", roomEntityMap.keySet().stream().map(key -> {
             Map<Object, Object> v = new HashMap();
             v.put("capacity", roomEntityMap.get(key).getCapacity());
-            v.put("num_users", roomEntityMap.get(key).getUsers().size());
+            v.put("num_users", roomEntityMap.get(key).getPlayers().size());
             v.put("room_id", key);
             return v;
         }).collect(Collectors.toList()));
