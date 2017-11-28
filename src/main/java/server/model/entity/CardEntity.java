@@ -4,16 +4,17 @@ public class CardEntity {
     private String suit;
     private int value;
     private String mappedValuetoString;
-
+    private boolean publiclyVisible;
     public CardEntity () {}
 
     public CardEntity (String suit, int value, String mappedValuetoString) {
+        this.publiclyVisible = false;
         this.suit = suit;
         this.value = value;
         this.mappedValuetoString = mappedValuetoString;
     }
 
-    public float getValue() {
+    public int getValue() {
         return value;
     }
 
@@ -35,6 +36,17 @@ public class CardEntity {
 
     @Override
     public String toString () {
-        return this.mappedValuetoString + this.suit;
+        if (publiclyVisible) {
+            return this.mappedValuetoString + this.suit;
+        }
+        return "XX";
+    }
+
+    public boolean isPubliclyVisible() {
+        return publiclyVisible;
+    }
+
+    public void setPubliclyVisible (boolean publiclyVisible) {
+        this.publiclyVisible = publiclyVisible;
     }
 }

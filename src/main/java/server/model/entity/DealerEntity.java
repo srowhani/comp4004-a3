@@ -17,9 +17,13 @@ public class DealerEntity {
         this._deck = _deck;
     }
 
-    public void deal(List<CardEntity> hand) {
-        hand.clear();
-        for (int i = 0 ; i < 2; i++)
-            hand.add(_deck.get_cards().remove(0));
+    public void deal(List<CardEntity> hand, int numCardsToDeal, boolean showCards) {
+        for (int i = 0 ; i < numCardsToDeal; i++) {
+            CardEntity card = _deck.get_cards().remove(0);
+            card.setPubliclyVisible(showCards);
+            hand.add(card);
+        }
+
     }
+
 }

@@ -8,10 +8,14 @@ import java.util.List;
 public class BotEntity implements PlayerEntity {
     private String username;
     private Algorithm _algo;
-    private List<CardEntity> _hand;
+    private int balance;
+    private HandEntity _hand;
+    private int playIndex = 0;
+    private boolean hasFolded;
 
     public BotEntity () {
-        _hand = new ArrayList();
+        hasFolded = false;
+        _hand = new HandEntity();
     }
 
     public BotEntity (String username) {
@@ -28,6 +32,16 @@ public class BotEntity implements PlayerEntity {
     }
 
     @Override
+    public int getBalance() {
+        return balance;
+    }
+
+    @Override
+    public void setBalance(int newBalance) {
+        this.balance = newBalance;
+    }
+
+    @Override
     public String getType() {
         return "bot";
     }
@@ -38,11 +52,24 @@ public class BotEntity implements PlayerEntity {
     }
 
     @Override
-    public List<CardEntity> getHand() {
+    public HandEntity getHand() {
         return _hand;
+    }
+
+    @Override
+    public void fold() {
+        this.hasFolded = true;
+    }
+    @Override
+    public boolean hasFolded () {
+        return hasFolded;
     }
 
     public void setUsername(String username) {
         this.username = username;
+    }
+
+    public void setPlayIndex(int playIndex) {
+        this.playIndex = playIndex;
     }
 }

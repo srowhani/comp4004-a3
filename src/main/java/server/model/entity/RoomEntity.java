@@ -6,13 +6,12 @@ import java.util.stream.Collectors;
 
 public class RoomEntity {
     private String state;
-    private String[] actionQueue = {"action_flop", "action_turn", "action_river"};
-    private int queueIndex = 0;
 
     private UserEntity host;
     private DealerEntity _dealer;
     private int capacity;
 
+    int currentUserIndex = 0;
     private List<PlayerEntity> players;
 
     public RoomEntity() {
@@ -58,12 +57,15 @@ public class RoomEntity {
             .collect(Collectors.toList());
     }
 
-    public DealerEntity getDealer() {
-        return _dealer;
+    public List<BotEntity> getBots () {
+        return players.stream()
+                .filter(player -> player.getType().equals("bot"))
+                .map(p -> (BotEntity) p)
+                .collect(Collectors.toList());
     }
 
-    public String getAction () {
-        return this.actionQueue[(queueIndex++ % this.actionQueue.length)];
+    public DealerEntity getDealer() {
+        return _dealer;
     }
 
     public String getState() {
@@ -72,5 +74,14 @@ public class RoomEntity {
 
     public void setState(String state) {
         this.state = state;
+    }
+
+    public UserEntity next () {
+        try {
+            return getUsers().get(getUsers().size() - currentUserIndex++ - 1);
+        } catch (IndexOutOfBoundsException e) {
+            return null;
+        }
+
     }
 }
