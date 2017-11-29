@@ -3,9 +3,7 @@ package server.model.entity.algo;
 import server.model.entity.CardEntity;
 import server.model.entity.HandEntity;
 
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
 import java.util.stream.Collectors;
 
 public abstract class Algorithm {
@@ -144,6 +142,35 @@ public abstract class Algorithm {
         return result;
     }
 
+    public int compare (HandEntity h1, HandEntity h2) {
+        double d1 = getRanking(h1);
+        double d2 = getRanking(h2);
+        if (d1 > d2) {
+            return 1;
+        } else if (d2 > d1) {
+            return -1;
+        } else {
+            OptionalInt maxH1 = h1.get_cards().stream().mapToInt(CardEntity::getValue).max();
+            if (maxH1.isPresent()) {
+                OptionalInt maxH2 = h2.get_cards().stream().mapToInt(CardEntity::getValue).max();
+                if (maxH2.isPresent()) {
+                    int a = maxH1.getAsInt();
+                    int b = maxH2.getAsInt();
+                    if (a > b) {
+                        return 1;
+                    } else if (b > a){
+                        return -1;
+                    } else {
+                        return 0;
+                    }
+                } else {
+                    return 1;
+                }
+            } else {
+                return -1;
+            }
+        }
+    }
     public double getRanking(HandEntity mHand) {
         double ranking = 0;
 

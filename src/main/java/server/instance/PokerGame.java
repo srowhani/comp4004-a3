@@ -36,7 +36,27 @@ public class PokerGame {
         strats.put("type_one", new Algorithm() {
             @Override
             public boolean shouldHold(HandEntity mHand, List<HandEntity> otherHands, boolean goingFirst) {
-                return getRanking(mHand) > 4;
+                if (getRanking(mHand) > 4) {
+                    return true;
+                } else {
+                    Map<Integer, Integer> mc = new HashMap();
+                    for (CardEntity _c : mHand.get_cards()) {
+                        mc.put(_c.getValue(), mc.getOrDefault(_c.getValue(), 0) + 1);
+                    }
+                    int numCardsRemoved = 0;
+                    for (int key : mc.keySet()) {
+                        if (mc.get(key) < 2) {
+                            CardEntity cardToRemove = mHand.get_cards().stream().filter(c -> c.getValue() == key).findFirst().get();
+                            mHand.get_cards().remove(cardToRemove);
+                            numCardsRemoved++;
+                        }
+                    }
+                    currentRoom.getDealer().deal(mHand.get_cards(), numCardsRemoved, true);
+                    if (isFullHouse(mHand) >= 6 && isFullHouse(mHand) <= 7) {
+                        return true;
+                    }
+                }
+                return false;
             }
         });
 
@@ -94,7 +114,57 @@ public class PokerGame {
             userFold(session, update);
         } else if (type.equals("action_hold")) {
             userHold(session, update);
+        } else if (type.equals("improve_cards")) {
+            userImproveCards(session, update);
         }
+    }
+
+    private void userImproveCards(Session session, StateUpdate update) throws IOException {
+        Map<Object, Object> payload = update.getContent();
+        String user_id = String.valueOf(payload.get("user_id"));
+        String room_id = String.valueOf(payload.get("room_id"));
+        String improveCards = String.valueOf(payload.get("cards_to_improve"));
+
+        RoomEntity room = roomEntityMap.get(room_id);
+        UserEntity user = room.getUsers().stream().filter(u -> u.get_username().equals(user_id)).findFirst().get();
+
+        user.getHand().set_cards(user.getHand().get_cards().stream().filter(cardEntity -> !improveCards.contains(cardEntity.toString())).collect(Collectors.toList()));
+
+        user.getHand().get_cards().forEach(card -> {
+            card.setPubliclyVisible(false);
+        });
+
+        room.getDealer().deal(user.getHand().get_cards(), improveCards.split(" ").length, true);
+        StateUpdate newCards = new StateUpdate("attempt_improve_cards");
+        newCards.put("user_id", user.get_username());
+        newCards.put("cards", user.getHand().get_cards().stream().map(card -> card.toString()).collect(Collectors.toList()));
+        UserEntity nextUser = room.next();
+
+        if (nextUser != null) {
+            room.getUsers().forEach(u -> {
+                try {
+                    u.get_session().getRemote().sendString(objectMapper.writeValueAsString(newCards));
+                    StateUpdate n = new StateUpdate("turn_update");
+                    n.put("user_id", nextUser.get_username());
+                    u.get_session().getRemote().sendString(objectMapper.writeValueAsString(n));
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            });
+        } else {
+            evaluateWinner(room);
+        }
+
+
+        StateUpdate cardUpdate = new StateUpdate("got_cards");
+        List<String> cards = user.getHand().get_cards().stream()
+                .map(card -> {
+                    card.setPubliclyVisible(true);
+                    return card.toString();
+                }).collect(Collectors.toList());
+        cardUpdate.put("player_cards", cards);
+        user.get_session().getRemote().sendString(objectMapper.writeValueAsString(cardUpdate));
+
     }
 
     private void userHold(Session session, StateUpdate update) throws IOException {
@@ -105,10 +175,44 @@ public class PokerGame {
         UserEntity u = roomEntity.next();
 
         if (u != null) {
-            StateUpdate turn = new StateUpdate("your_turn");
-
-            u.get_session().getRemote().sendString(objectMapper.writeValueAsString(turn));
+            StateUpdate turn = new StateUpdate("turn_update");
+            turn.put("user_id", u.get_username());
+            roomEntity.getUsers().forEach(ur -> {
+                try {
+                    ur.get_session().getRemote().sendString(objectMapper.writeValueAsString(turn));
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            });
+        } else {
+            evaluateWinner(roomEntity);
         }
+    }
+
+    private void evaluateWinner(RoomEntity roomEntity) {
+        Algorithm evalAlgo = new Algorithm() {
+            @Override
+            public boolean shouldHold(HandEntity mHand, List<HandEntity> otherHands, boolean goingFirst) {
+                return false;
+            }
+        };
+        PlayerEntity uu = roomEntity
+            .getPlayers()
+            .stream()
+            .filter(p -> !p.hasFolded())
+            .sorted((u1, u2) -> evalAlgo.compare(u2.getHand(), u1.getHand()))
+            .findFirst().get();
+        System.out.println("winner is: " + uu.get_username());
+        StateUpdate winnerUpdate = new StateUpdate("winner");
+        winnerUpdate.put("user_id", uu.get_username());
+        roomEntity.getUsers().forEach(u -> {
+            try {
+                u.get_session().getRemote().sendString(objectMapper.writeValueAsString(winnerUpdate));
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        });
+        System.out.println("game over");
     }
 
     private void userFold(Session session, StateUpdate update) throws IOException {
@@ -123,14 +227,21 @@ public class PokerGame {
         UserEntity u = roomEntity.next();
 
         if (u != null) {
-            StateUpdate turn = new StateUpdate("your_turn");
-
-            u.get_session().getRemote().sendString(objectMapper.writeValueAsString(turn));
+            StateUpdate turn = new StateUpdate("turn_update");
+            turn.put("user_id", u.get_username());
+            roomEntity.getUsers().forEach(ur -> {
+                try {
+                    ur.get_session().getRemote().sendString(objectMapper.writeValueAsString(turn));
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            });
+        } else {
+            evaluateWinner(roomEntity);
         }
-
     }
 
-    private void playRound(String roomId) {
+    private void playRound(String roomId) throws IOException {
         RoomEntity room = roomEntityMap.get(roomId);
 
         room.getDealer().get_deck()._init();
@@ -174,9 +285,16 @@ public class PokerGame {
                  });
             }
         }
+        System.out.println("log: user_hands");
 
         UserEntity nextUser = room.next();
+
         if (nextUser != null) {
+            if (room.getPlayers().stream().filter(p -> !p.get_username().equals(nextUser.get_username())).allMatch(p -> p.hasFolded())) {
+                nextUser.get_session().getRemote().sendString(objectMapper.writeValueAsString(new StateUpdate("win")));
+                return;
+            }
+
             StateUpdate uTurn = new StateUpdate("turn_update");
             Map<Object, Object> v = new HashMap();
             v.put("user_id", nextUser.get_username());
