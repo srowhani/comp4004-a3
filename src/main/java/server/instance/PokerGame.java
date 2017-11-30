@@ -8,6 +8,8 @@ import org.eclipse.jetty.websocket.api.Session;
 import server.model.StateUpdate;
 import server.model.entity.*;
 import server.model.entity.algo.Algorithm;
+import server.model.entity.algo.StrategyOne;
+import server.model.entity.algo.StrategyTwo;
 
 import java.io.IOException;
 import java.util.*;
@@ -24,7 +26,7 @@ public class PokerGame {
     private ObjectMapper objectMapper;
     private Map<String, RoomEntity> roomEntityMap;
     private RoomEntity currentRoom;
-    private Map<String, Algorithm> strats;
+    private Map<String, Class> strats;
     private PokerGame() {
         objectMapper = new ObjectMapper();
         objectMapper.setVisibility(PropertyAccessor.FIELD, JsonAutoDetect.Visibility.ANY);
@@ -33,62 +35,9 @@ public class PokerGame {
 
         strats = new HashMap();
 
-        strats.put("type_one", new Algorithm() {
-            @Override
-            public boolean shouldHold(HandEntity mHand, List<HandEntity> otherHands, boolean goingFirst) {
-                if (getRanking(mHand) > 4) {
-                    return true;
-                } else {
-                    Map<Integer, Integer> mc = new HashMap();
-                    for (CardEntity _c : mHand.get_cards()) {
-                        mc.put(_c.getValue(), mc.getOrDefault(_c.getValue(), 0) + 1);
-                    }
-                    int numCardsRemoved = 0;
-                    for (int key : mc.keySet()) {
-                        if (mc.get(key) < 2) {
-                            CardEntity cardToRemove = mHand.get_cards().stream().filter(c -> c.getValue() == key).findFirst().get();
-                            mHand.get_cards().remove(cardToRemove);
-                            numCardsRemoved++;
-                        }
-                    }
-                    currentRoom.getDealer().deal(mHand.get_cards(), numCardsRemoved, true);
-                    if (isFullHouse(mHand) >= 6 && isFullHouse(mHand) <= 7) {
-                        return true;
-                    }
-                }
-                return false;
-            }
-        });
+        strats.put("type_one", StrategyOne.class);
 
-        strats.put("type_two", new Algorithm() {
-            @Override
-            public boolean shouldHold(HandEntity mHand, List<HandEntity> otherHands, boolean goingFirst) {
-                if (goingFirst) {
-                    return getRanking(mHand) > 4;
-                } else {
-                    for (HandEntity hand : otherHands) {
-                        List<CardEntity> cards = hand.get_cards().stream().filter(c -> c.isPubliclyVisible()).collect(Collectors.toList());
-                        if (cards.size() > 2 && cards.stream().allMatch(c -> c.getSuit().equals(cards.get(0).getSuit()))) {
-                            Map<Integer, Integer> mc = new HashMap();
-                            for (CardEntity _c : mHand.get_cards()) {
-                                mc.put(_c.getValue(), mc.getOrDefault(_c.getValue(), 0) + 1);
-                            }
-                            int numCardsRemoved = 0;
-                            for (int key : mc.keySet()) {
-                                if (mc.get(key) < 2) {
-                                    CardEntity cardToRemove = mHand.get_cards().stream().filter(c -> c.getValue() == key).findFirst().get();
-                                    mHand.get_cards().remove(cardToRemove);
-                                    numCardsRemoved++;
-                                }
-                            }
-                            currentRoom.getDealer().deal(mHand.get_cards(), numCardsRemoved, true);
-                            return true;
-                        }
-                    }
-                    return getRanking(mHand) > 4;
-                }
-            }
-        });
+        strats.put("type_two", StrategyTwo.class);
 
     }
 
@@ -192,19 +141,29 @@ public class PokerGame {
     private void evaluateWinner(RoomEntity roomEntity) {
         Algorithm evalAlgo = new Algorithm() {
             @Override
-            public boolean shouldHold(HandEntity mHand, List<HandEntity> otherHands, boolean goingFirst) {
+            public boolean shouldHold(HandEntity mHand, RoomEntity room, List<HandEntity> otherHands, boolean goingFirst) {
                 return false;
             }
         };
-        PlayerEntity uu = roomEntity
+        List<Map<Object, Object>> sorted = roomEntity
             .getPlayers()
             .stream()
-            .filter(p -> !p.hasFolded())
-            .sorted((u1, u2) -> evalAlgo.compare(u2.getHand(), u1.getHand()))
-            .findFirst().get();
-        System.out.println("winner is: " + uu.get_username());
+            .sorted((u1, u2) -> evalAlgo.compare(u2, u1))
+            .map(p -> {
+                Map<Object, Object> v = new HashMap();
+                v.put("user_id", p.get_username());
+                v.put("hand", p.getHand().get_cards().stream().map(h -> {
+                    h.setPubliclyVisible(true);
+                    return h.toString();
+                }).collect(Collectors.toList()));
+                v.put("rank", evalAlgo.getRanking(p.getHand()));
+                return v;
+            }).collect(Collectors.toList());
+
+
         StateUpdate winnerUpdate = new StateUpdate("winner");
-        winnerUpdate.put("user_id", uu.get_username());
+        winnerUpdate.put("user_list", sorted);
+
         roomEntity.getUsers().forEach(u -> {
             try {
                 u.get_session().getRemote().sendString(objectMapper.writeValueAsString(winnerUpdate));
@@ -212,7 +171,6 @@ public class PokerGame {
                 e.printStackTrace();
             }
         });
-        System.out.println("game over");
     }
 
     private void userFold(Session session, StateUpdate update) throws IOException {
@@ -266,7 +224,7 @@ public class PokerGame {
         for (int i = 0 ; i < room.getBots().size(); i++) {
             BotEntity bot = room.getBots().get(i);
             List<HandEntity> otherHands = room.getPlayers().stream().filter(p -> !p.get_username().equals(bot.get_username())).map(p -> p.getHand()).collect(Collectors.toList());
-            boolean shouldHold = bot.getAlgorithm().shouldHold(bot.getHand(), otherHands, i == 0);
+            boolean shouldHold = bot.getAlgorithm().shouldHold(bot.getHand(), room, otherHands, i == 0);
 
             if (!shouldHold) {
                  bot.fold();
@@ -291,7 +249,7 @@ public class PokerGame {
 
         if (nextUser != null) {
             if (room.getPlayers().stream().filter(p -> !p.get_username().equals(nextUser.get_username())).allMatch(p -> p.hasFolded())) {
-                nextUser.get_session().getRemote().sendString(objectMapper.writeValueAsString(new StateUpdate("win")));
+                evaluateWinner(room);
                 return;
             }
 
@@ -320,9 +278,18 @@ public class PokerGame {
         String roomId = String.valueOf(payload.get("room_id"));
         currentRoom = roomEntityMap.get(roomId);
         this.roomEntityMap.get(roomId).setState("game_started");
+        currentRoom.getUsers().forEach(p -> {
+            p.getHand().set_cards(new ArrayList());
+        });
         playRound(roomId);
         StateUpdate gameStarted = new StateUpdate("game_started");
-        session.getRemote().sendString(objectMapper.writeValueAsString(gameStarted));
+        currentRoom.getUsers().forEach(u -> {
+            try {
+                u.get_session().getRemote().sendString(objectMapper.writeValueAsString(gameStarted));
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        });
     }
 
     private void roomAddAi(Session session, StateUpdate update) throws IOException {
@@ -333,9 +300,27 @@ public class PokerGame {
         BotEntity bot = new BotEntity();
         bot.setUsername(String.valueOf(payload.get("name")));
         try {
-            bot.setAlgorithm(strats.get(aiType));
+            bot.setAlgorithm((Algorithm) strats.get(aiType).newInstance());
         } catch (Exception e) {
             session.getRemote().sendString(objectMapper.writeValueAsString(new StateUpdate("bot_instance_failed")));
+        }
+        if (payload.containsKey("start_cards")) {
+            String[] cards = String.valueOf(payload.get("start_cards")).split(" ");
+            for (String c : cards) {
+                Map<String, Integer> cMap = new HashMap();
+                cMap.put("A", 1);
+                cMap.put("J", 11);
+                cMap.put("Q", 12);
+                cMap.put("K", 13);
+
+                String value = c.charAt(0) + "";
+                String suit = c.charAt(1) + "";
+                int v = cMap.computeIfAbsent(value, s -> Integer.parseInt(s));
+
+                CardEntity cc = new CardEntity(suit, v, value);
+                cc.setPubliclyVisible(true);
+                bot.getHand().get_cards().add(cc);
+            }
         }
 
         RoomEntity roomEntity = roomEntityMap.get(roomId);

@@ -2,12 +2,14 @@ package server.model.entity.algo;
 
 import server.model.entity.CardEntity;
 import server.model.entity.HandEntity;
+import server.model.entity.PlayerEntity;
+import server.model.entity.RoomEntity;
 
 import java.util.*;
 import java.util.stream.Collectors;
 
 public abstract class Algorithm {
-    public abstract boolean shouldHold(HandEntity mHand, List<HandEntity> otherHands, boolean goingFirst);
+    public abstract boolean shouldHold(HandEntity mHand, RoomEntity room, List<HandEntity> otherHands, boolean goingFirst);
 
     public double isStraight(HandEntity mHand) {
         double result = 0.0;
@@ -130,7 +132,6 @@ public abstract class Algorithm {
     }
     public double isThreeOfAKind(HandEntity mHand) {
         double result = 0.0;
-        int counter = 0;
         int[] values = mHand.get_cards().stream().mapToInt(CardEntity::getValue).toArray();
         Arrays.sort(values);
         for (int i = 0; i < values.length - 2; i++) {
@@ -142,9 +143,14 @@ public abstract class Algorithm {
         return result;
     }
 
-    public int compare (HandEntity h1, HandEntity h2) {
-        double d1 = getRanking(h1);
-        double d2 = getRanking(h2);
+    public int compare (PlayerEntity u1, PlayerEntity u2) {
+        double d1, d2;
+        HandEntity h1 = u1.getHand();
+        HandEntity h2 = u2.getHand();
+
+        d1 = u1.hasFolded() ? -1 : getRanking(h1);
+        d2 = u2.hasFolded() ? -1 : getRanking(h2);
+
         if (d1 > d2) {
             return 1;
         } else if (d2 > d1) {

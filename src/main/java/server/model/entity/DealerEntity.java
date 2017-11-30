@@ -18,6 +18,11 @@ public class DealerEntity {
     }
 
     public void deal(List<CardEntity> hand, int numCardsToDeal, boolean showCards) {
+
+        if (hand.size() == 5) {
+            return;
+        }
+
         for (int i = 0 ; i < numCardsToDeal; i++) {
             CardEntity card = _deck.get_cards().remove(0);
             card.setPubliclyVisible(showCards);
