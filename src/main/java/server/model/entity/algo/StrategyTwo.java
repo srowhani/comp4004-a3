@@ -1,9 +1,12 @@
 package server.model.entity.algo;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import server.model.StateUpdate;
 import server.model.entity.CardEntity;
 import server.model.entity.HandEntity;
 import server.model.entity.RoomEntity;
 
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -13,7 +16,14 @@ public class StrategyTwo extends Algorithm {
     @Override
     public boolean shouldHold(HandEntity mHand, RoomEntity room, List<HandEntity> otherHands, boolean goingFirst) {
         if (goingFirst) {
-            return getRanking(mHand) > 4;
+            room.getUsers().forEach(u -> {
+                try {
+                    u.get_session().getRemote().sendString(new ObjectMapper().writeValueAsString(new StateUpdate("strat_one")));
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            });
+            return new StrategyOne().shouldHold(mHand, room, otherHands, goingFirst);
         } else {
             for (HandEntity hand : otherHands) {
                 List<CardEntity> cards = hand.get_cards().stream().filter(c -> c.isPubliclyVisible()).collect(Collectors.toList());
@@ -45,7 +55,14 @@ public class StrategyTwo extends Algorithm {
                     return true;
                 }
             }
-            return getRanking(mHand) > 4;
+            room.getUsers().forEach(u -> {
+                try {
+                    u.get_session().getRemote().sendString(new ObjectMapper().writeValueAsString(new StateUpdate("strat_one")));
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            });
+            return new StrategyOne().shouldHold(mHand, room, otherHands, goingFirst);
         }
     }
 }

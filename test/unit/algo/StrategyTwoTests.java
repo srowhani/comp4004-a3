@@ -10,9 +10,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotEquals;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.*;
 
 public class StrategyTwoTests {
     private static BotEntity b;
@@ -44,8 +42,6 @@ public class StrategyTwoTests {
         boolean shouldHold2 = b1.getAlgorithm().shouldHold(mHand, mRoom, new ArrayList(), true);
 
         assertEquals(shouldHold, shouldHold2);
-
-
     }
 
     @Test
@@ -110,6 +106,92 @@ public class StrategyTwoTests {
         // changes all cards
         for (int i = 0; i < cards.size(); i++) {
             assertNotEquals(cardClone.get(i), cards.get(i));
+        }
+    }
+
+    @Test
+    public void visibleCardModifierSituationNoThreeOfSameKind () {
+        HandEntity mHand = new HandEntity();
+
+        BotEntity b1 = new BotEntity();
+        b1.setAlgorithm(new StrategyOne());
+
+        RoomEntity mRoom = new RoomEntity();
+        PlayerEntity p1 = new BotEntity();
+
+        List<CardEntity> cards2 = new ArrayList();
+        cards2.add(new CardEntity("C", 1, "A"));
+        cards2.add(new CardEntity("D", 2, "2"));
+        cards2.add(new CardEntity("D", 3, "3"));
+        cards2.add(new CardEntity("C", 4, "4"));
+        cards2.add(new CardEntity("H", 5, "5"));
+        cards2.forEach(c -> c.setPubliclyVisible(true));
+        p1.getHand().set_cards(cards2);
+
+        List<HandEntity> otherHands = new ArrayList();
+
+        otherHands.add(p1.getHand());
+
+        List<CardEntity> cards = new ArrayList();
+
+        cards.add(new CardEntity("C", 1, "A"));
+        cards.add(new CardEntity("D", 2, "2"));
+        cards.add(new CardEntity("C", 3, "3"));
+        cards.add(new CardEntity("D", 4, "4"));
+        cards.add(new CardEntity("H", 5, "5"));
+
+        List<CardEntity> cardClone = cards.stream().collect(Collectors.toList());
+
+        mHand.set_cards(cards);
+
+        boolean shouldHold = b.getAlgorithm().shouldHold(mHand, mRoom, otherHands, false);
+        assertTrue(shouldHold);
+        // no cards are visible, because visible player before not good enough.
+        for (int i = 0; i < cards.size(); i++) {
+            assertEquals(cardClone.get(i).toString(), "XX");
+        }
+    }
+
+    @Test
+    public void visibleCardModifierSituationNoThreeOfSameKindNotGoodEnoughToHold () {
+        HandEntity mHand = new HandEntity();
+
+        BotEntity b1 = new BotEntity();
+        b1.setAlgorithm(new StrategyOne());
+
+        RoomEntity mRoom = new RoomEntity();
+        PlayerEntity p1 = new BotEntity();
+
+        List<CardEntity> cards2 = new ArrayList();
+        cards2.add(new CardEntity("C", 1, "A"));
+        cards2.add(new CardEntity("D", 2, "2"));
+        cards2.add(new CardEntity("D", 3, "3"));
+        cards2.add(new CardEntity("C", 4, "4"));
+        cards2.add(new CardEntity("H", 5, "5"));
+        cards2.forEach(c -> c.setPubliclyVisible(true));
+        p1.getHand().set_cards(cards2);
+
+        List<HandEntity> otherHands = new ArrayList();
+
+        otherHands.add(p1.getHand());
+
+        List<CardEntity> cards = new ArrayList();
+
+        cards.add(new CardEntity("C", 1, "A"));
+        cards.add(new CardEntity("D", 2, "2"));
+        cards.add(new CardEntity("C", 3, "3"));
+        cards.add(new CardEntity("D", 4, "4"));
+        cards.add(new CardEntity("H", 6, "6"));
+
+        List<CardEntity> cardClone = cards.stream().collect(Collectors.toList());
+
+        mHand.set_cards(cards);
+
+        boolean shouldHold = b.getAlgorithm().shouldHold(mHand, mRoom, otherHands, false);
+        assertFalse(shouldHold);
+        // no cards are visible, because visible player before not good enough.
+        for (int i = 0; i < cards.size(); i++) {
+            assertEquals(cardClone.get(i).toString(), "XX");
         }
     }
 }

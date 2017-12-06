@@ -1,0 +1,22 @@
+Running the system:
+
+Running the application itself:
+
+First thing you must do is install dependencies. Ideally, you are working with an IDE that will
+parse the `pom.xml` and automatically fetch the deps.
+
+But if you wish to go the command line approach - from the project root directory, run the following:
+
+`mvn compile`
+`mvn assembly:single`
+
+This should build the jar for you.
+
+It can be accessed @ `target/a3-0.1.0-jar-with-dependencies.jar`
+
+If you have an IDE, you can run the server by launching `src/main/java/BootServerThread`.
+
+Alternatively, it's also provided as a JAR in the artifacts section
+
+`java -jar out/artifacts/a3_jar/a3.jar`
+

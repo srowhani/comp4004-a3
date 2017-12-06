@@ -15,7 +15,17 @@ public abstract class Algorithm {
         double result = 0.0;
         int[] values = mHand.get_cards().stream().mapToInt(CardEntity::getValue).toArray();
         Arrays.sort(values);
-        for (int i = 0; i < values.length - 1; i++){
+
+        if (values[0] == 1 && values[1] != 2) {
+            if (values[values.length - 1] == 13) {
+                values[0] = 14;
+                Arrays.sort(values);
+            } else {
+                return 0;
+            }
+        }
+
+        for (int i = 0; i < values.length - 1; i++) {
             if (values[i] == values[i + 1] - 1) {
                 result = 4.0 + (values[i + 1] * 0.01);
             } else {
@@ -47,23 +57,17 @@ public abstract class Algorithm {
 
     public double isFullHouse(HandEntity mHand) {
         double result = 0.0;
-        boolean one = false;
-        boolean two = false;
 
         int[] values = mHand.get_cards().stream().mapToInt(CardEntity::getValue).toArray();
         Arrays.sort(values);
 
-        for (int i = 0; i < values.length - 2; i++) {
-            if (values[i] == values[i + 1] && values[i] == values[i + 2]) {
-                one = true;
-            }
+        Map<Integer, Integer> f = new HashMap();
+        for (int value : values) {
+            f.put(value, f.getOrDefault(value, 0) + 1);
         }
 
-        if (values[3] == values[4]) {
-            two = true;
-        }
 
-        if (one && two) {
+        if (f.containsValue(3) && f.containsValue(2)) {
             result = 6.0 + (values[values.length - 1] * 0.01);
         }
 
@@ -156,17 +160,32 @@ public abstract class Algorithm {
         } else if (d2 > d1) {
             return -1;
         } else {
-            OptionalInt maxH1 = h1.get_cards().stream().mapToInt(CardEntity::getValue).max();
-            if (maxH1.isPresent()) {
-                OptionalInt maxH2 = h2.get_cards().stream().mapToInt(CardEntity::getValue).max();
-                if (maxH2.isPresent()) {
-                    int a = maxH1.getAsInt();
-                    int b = maxH2.getAsInt();
+            Optional<CardEntity> maxCard1 = h1.get_cards().stream().max((c, v) -> v.getValue() - c.getValue());
+            if (maxCard1.isPresent()) {
+                Optional<CardEntity> maxCard2 = h2.get_cards().stream().max((c, v) -> v.getValue() - c.getValue());
+                if (maxCard2.isPresent()) {
+                    int a = maxCard1.get().getValue();
+                    int b = maxCard2.get().getValue();
                     if (a > b) {
                         return 1;
                     } else if (b > a){
                         return -1;
                     } else {
+                        Map<String, Integer> suitRank = new HashMap();
+                        suitRank.put("S", 4);
+                        suitRank.put("H", 3);
+                        suitRank.put("C", 2);
+                        suitRank.put("D", 1);
+
+                        int c = suitRank.get(maxCard1.get().getSuit());
+                        int d = suitRank.get(maxCard2.get().getSuit());
+
+                        if (c > d) {
+                            return 1;
+                        }
+                        else if (d > c) {
+                            return -1;
+                        }
                         return 0;
                     }
                 } else {
@@ -179,8 +198,9 @@ public abstract class Algorithm {
     }
     public double getRanking(HandEntity mHand) {
         double ranking = 0;
-
-        if (isStraightFlush(mHand) > 8.0) {
+        if (isRoyalFlush(mHand) > 9.0) {
+            ranking = isRoyalFlush(mHand);
+        } else if (isStraightFlush(mHand) > 8.0) {
             ranking = isStraightFlush(mHand);
         } else if (isFourOfAKind(mHand) > 7.0) {
             ranking = isFourOfAKind(mHand);
@@ -199,5 +219,17 @@ public abstract class Algorithm {
         }
 
         return ranking;
+    }
+
+    private double isRoyalFlush(HandEntity mHand) {
+        OptionalInt optionalInt = mHand.get_cards().stream().filter(c -> c.getValue() > 1).mapToInt(CardEntity::getValue).min();
+
+        if (optionalInt.isPresent()) {
+            int minValueCard = optionalInt.getAsInt();
+            if (minValueCard == 10 && isStraightFlush(mHand) > 8.0) {
+                return 1 + isStraightFlush(mHand);
+            }
+        }
+        return 0;
     }
 }

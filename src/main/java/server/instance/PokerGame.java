@@ -18,6 +18,8 @@ import java.util.stream.Collectors;
 
 public class PokerGame {
     private static PokerGame _instance = new PokerGame();
+    private boolean shouldShuffleDeck = true;
+
     public static PokerGame getInstance() {
         return _instance;
     }
@@ -38,7 +40,6 @@ public class PokerGame {
         strats.put("type_one", StrategyOne.class);
 
         strats.put("type_two", StrategyTwo.class);
-
     }
 
     public Map<Session, String> getSessions() {
@@ -65,7 +66,84 @@ public class PokerGame {
             userHold(session, update);
         } else if (type.equals("improve_cards")) {
             userImproveCards(session, update);
+        } else if (type.equals("set_starting_cards")) {
+            setStartingCards(session, update);
+        } else if (type.equals("remove_cards_from_deck")) {
+            removeCards(session, update);
+        } else if (type.equals("queue_cards_to_deck")) {
+            queueCardsToDeck(session, update);
         }
+    }
+
+    private void queueCardsToDeck(Session session, StateUpdate update) {
+        Map<Object, Object> payload = update.getContent();
+        String room_id = String.valueOf(payload.get("room_id"));
+        String cards = String.valueOf(payload.get("cards"));
+        RoomEntity room = roomEntityMap.get(room_id);
+
+        Map<String, Integer> cMap = new HashMap();
+        cMap.put("A", 1);
+        cMap.put("J", 11);
+        cMap.put("Q", 12);
+        cMap.put("K", 13);
+
+        for (String card : cards.split(" ")) {
+            String value = card.substring(0, card.length() - 1);
+            String suit = card.charAt(card.length() - 1) + "";
+            int v = cMap.computeIfAbsent(value, s -> Integer.parseInt(s));
+            room.getDealer().get_deck().get_cards().add(0, new CardEntity(suit, v, value));
+        }
+        shouldShuffleDeck = false;
+        System.out.println("deck loaded");
+    }
+
+    private void removeCards(Session session, StateUpdate update) {
+        Map<Object, Object> payload = update.getContent();
+        String room_id = String.valueOf(payload.get("room_id"));
+        String cards = String.valueOf(payload.get("cards"));
+        RoomEntity room = roomEntityMap.get(room_id);
+
+        Map<String, Integer> cMap = new HashMap();
+        cMap.put("A", 1);
+        cMap.put("J", 11);
+        cMap.put("Q", 12);
+        cMap.put("K", 13);
+
+        for (String card : cards.split(" ")) {
+            String value = card.substring(0, card.length() - 1);
+            String suit = card.charAt(card.length() - 1) + "";
+            int v = cMap.computeIfAbsent(value, s -> Integer.parseInt(s));
+            room.getDealer().get_deck().get_cards().removeIf(c -> c.getValue() == v && c.getSuit().equals(suit));
+        }
+
+
+    }
+
+    private void setStartingCards(Session session, StateUpdate update) {
+        Map<Object, Object> payload = update.getContent();
+        String user_id = String.valueOf(payload.get("user_id"));
+        String room_id = String.valueOf(payload.get("room_id"));
+        String cards = String.valueOf(payload.get("cards"));
+
+        RoomEntity room = roomEntityMap.get(room_id);
+        UserEntity user = room.getUsers().stream().filter(u -> u.get_username().equals(user_id)).findFirst().get();
+
+
+        for (String c : cards.split(" ")) {
+            Map<String, Integer> cMap = new HashMap();
+            cMap.put("A", 1);
+            cMap.put("J", 11);
+            cMap.put("Q", 12);
+            cMap.put("K", 13);
+
+            String value = c.substring(0, c.length() - 1);
+            String suit = c.charAt(c.length() - 1) + "";
+            int v = cMap.computeIfAbsent(value, s -> Integer.parseInt(s));
+
+            CardEntity cc = new CardEntity(suit, v, value);
+            user.getHand().get_cards().add(cc);
+        }
+
     }
 
     private void userImproveCards(Session session, StateUpdate update) throws IOException {
@@ -202,7 +280,9 @@ public class PokerGame {
     private void playRound(String roomId) throws IOException {
         RoomEntity room = roomEntityMap.get(roomId);
 
-        room.getDealer().get_deck()._init();
+        if (shouldShuffleDeck) {
+            room.getDealer().get_deck()._init();
+        }
         // Deal cards
         room.getPlayers().forEach(player -> room.getDealer().deal(player.getHand().get_cards(), 5, false));
         // Update personal cards
@@ -278,9 +358,7 @@ public class PokerGame {
         String roomId = String.valueOf(payload.get("room_id"));
         currentRoom = roomEntityMap.get(roomId);
         this.roomEntityMap.get(roomId).setState("game_started");
-        currentRoom.getUsers().forEach(p -> {
-            p.getHand().set_cards(new ArrayList());
-        });
+
         playRound(roomId);
         StateUpdate gameStarted = new StateUpdate("game_started");
         currentRoom.getUsers().forEach(u -> {
@@ -313,8 +391,8 @@ public class PokerGame {
                 cMap.put("Q", 12);
                 cMap.put("K", 13);
 
-                String value = c.charAt(0) + "";
-                String suit = c.charAt(1) + "";
+                String value = c.substring(0, c.length() - 1);
+                String suit = c.charAt(c.length() - 1) + "";
                 int v = cMap.computeIfAbsent(value, s -> Integer.parseInt(s));
 
                 CardEntity cc = new CardEntity(suit, v, value);

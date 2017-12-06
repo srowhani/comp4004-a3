@@ -1,0 +1,20 @@
+a)
+Used Selenium + Junit for acceptance testing
+    Purpose was testing the UI
+    Location:
+        acceptance/UITests
+Used Junit for unit testing strategies.
+    Purpose was testing specific details of each strat.
+    Location:
+        unit/algo/*
+
+b)
+I've included an mp4 of the tests running @ project base directory. If you're not able to run an mp4 file:
+
+If you have chrome you should be able to drag and drop into window - and it will play.
+I've sped it up, so you don't have to watch 2 minutes of ui testing.
+
+There's also a screenshot of the test suite. In intellij, you can run a suite by running the folder.
+
+If you wish to run the tests on Eclipse
+    - right clicking the file, and selecting run as Junit test should also work.
