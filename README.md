@@ -1,15 +1,13 @@
 Seena Rowhani
 100945353
 Option 1
-
-Stack
- Backend
-  Spark (jetty)
-    sparkWebsockets
- Front End
-  Ember
-  https://github.com/srowhani/comp4004-a3-client
-
+## Stack
+- Backend
+  - Spark (jetty)
+  - sparkWebsockets
+- Front End
+  - Ember
+  - https://github.com/srowhani/comp4004-a3-client
 ## Running Server
 
 `java -jar out/artifacts/a3_jar/a3.jar`
