@@ -8,6 +8,7 @@ Stack
     sparkWebsockets
  Front End
   Ember
+  https://github.com/srowhani/comp4004-a3-client
 
 ## Running Server
 
